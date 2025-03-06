@@ -1,3 +1,4 @@
+/// <reference lib="dom.iterable" />
 import type { ClientConfig, FetchMapValue } from './types'
 import { ipcMain } from 'electron'
 import { nanoid } from 'nanoid'

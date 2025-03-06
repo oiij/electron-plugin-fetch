@@ -1,18 +1,18 @@
 {
-  "name": "ts-starter",
+  "name": "electron-plugin-fetch",
   "type": "module",
   "version": "0.0.1",
   "description": "",
   "author": "oiij",
   "license": "MIT",
-  "homepage": "https://github.com/oiij/ts-starter",
+  "homepage": "https://github.com/oiij/electron-plugin-fetch",
   "repository": {
     "type": "git",
-    "url": "git@github.com:oiij/ts-starter.git"
+    "url": "git@github.com:oiij/electron-plugin-fetch.git"
   },
-  "bugs": "https://github.com/oiij/ts-starter/issues",
+  "bugs": "https://github.com/oiij/electron-plugin-fetch/issues",
   "keywords": [
-    "ts-starter"
+    "electron-plugin-fetch"
   ],
   "sideEffects": false,
   "exports": {
@@ -20,6 +20,11 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
+    },
+    "./plugin": {
+      "types": "./dist/plugin.d.ts",
+      "import": "./dist/plugin.js",
+      "require": "./dist/plugin.cjs"
     }
   },
   "main": "./dist/index.js",
@@ -51,6 +56,12 @@
     "link": "pnpm link --global",
     "preinstall": "npx only-allow pnpm",
     "postinstall": "npx simple-git-hooks"
+  },
+  "dependencies": {
+    "axios": "^1.8.1",
+    "electron": "^35.0.0",
+    "mime": "^4.0.6",
+    "nanoid": "^5.1.2"
   },
   "devDependencies": {
     "@antfu/eslint-config": "^4.2.0",

@@ -1,13 +1,5 @@
 import type { electronFetchPreloadExpose } from './preload'
 
-declare global {
-  interface Window {
-    ipcRenderer?: typeof electronFetchPreloadExpose
-  }
-}
-
-export {}
-
 export interface Proxy {
   /**
    * Proxy all traffic to the passed URL.
@@ -83,3 +75,4 @@ export interface FetchMapValue {
   response?: Response
   reader?: ReadableStreamDefaultReader<Uint8Array>
 }
+export type ElectronFetchPreloadExpose = typeof electronFetchPreloadExpose

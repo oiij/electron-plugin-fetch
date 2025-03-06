@@ -4,7 +4,8 @@
   "compilerOptions": {
     "moduleResolution": "bundler",
     "types": [
-      "./shims.axios.d.ts"
+      "./shims.axios.d.ts",
+      "./shims.window.d.ts"
     ]
   },
   "include": ["src"],

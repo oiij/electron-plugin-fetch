@@ -1,4 +1,4 @@
-import type { PreloadReturns } from './preload'
+import type { ElectronPluginFetchPreloadReturns } from './preload'
 
 type ProxyConfig = & {
   /**
@@ -39,7 +39,7 @@ export type ClientOptions = & {
   timeout?: number
   proxy?: Proxy
   stream?: boolean
-  preload?: PreloadReturns
+  preload?: ElectronPluginFetchPreloadReturns
 }
 
 export type ClientConfig = & {

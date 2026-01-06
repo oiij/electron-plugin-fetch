@@ -1,15 +1,32 @@
 /// <reference lib="dom.iterable" />
+
+import type { ElectronPluginFetchPreloadReturns } from './preload'
 import type { ClientOptions } from './types'
-import { FetchError } from './utils'
+import { ELECTRON_PLUGIN_FETCH_API_KEY } from './config'
 
-export async function fetch(input: URL | Request | string, init?: RequestInit & ClientOptions): Promise<Response> {
-  const { maxRedirects, timeout, proxy, ipcRendererKey = 'ipcRenderer', ..._init } = init || {}
-
-  const { fetch, fetchCancel, fetchSend, fetchBody, fetchStream, onStream, onStreamEnd, onStreamError } = window?.[ipcRendererKey as 'ipcRenderer'] ?? {}
-  if (!fetch || !fetchCancel || !fetchSend || !fetchBody || !fetchStream || !onStream || !onStreamEnd || !onStreamError) {
-    throw new FetchError('ipcRenderer.fetch is not defined', 'IPC_NOT_FOUND')
+declare global {
+  interface Window {
+    [ELECTRON_PLUGIN_FETCH_API_KEY]?: ElectronPluginFetchPreloadReturns
   }
+}
 
+export {}
+
+class FetchError extends Error {
+  constructor(message: string, public code: string) {
+    super(message)
+    this.name = 'FetchError'
+  }
+}
+
+export async function fetch(input: URL | Request | string, options?: RequestInit & ClientOptions): Promise<Response> {
+  const { maxRedirects, timeout, proxy, stream, preload, ..._init } = options ?? {}
+  const defaultPreload: Partial<ElectronPluginFetchPreloadReturns> = { ...window[ELECTRON_PLUGIN_FETCH_API_KEY], ...preload }
+
+  const { fetchRequest, fetchCancel, fetchBody, fetchStream, onStream, onStreamEnd, onStreamError } = defaultPreload
+  if (!fetchRequest || !fetchCancel || !fetchBody || !fetchStream || !onStream || !onStreamEnd || !onStreamError) {
+    throw new FetchError('Electron payload fetch api not found', 'API_NOT_FOUND')
+  }
   const signal = _init.signal
 
   try {
@@ -30,7 +47,7 @@ export async function fetch(input: URL | Request | string, init?: RequestInit & 
 
     const HeadersArray: [string, string][] = Array.from(headers.entries()).map(([name, val]) => [name, String(val)])
 
-    const { requestId } = await fetch({
+    const { status, statusText, url, headers: resHeaders, requestId } = await fetchRequest({
       method: request.method,
       url: request.url,
       headers: HeadersArray,
@@ -54,45 +71,49 @@ export async function fetch(input: URL | Request | string, init?: RequestInit & 
       throw new FetchError('Request aborted', 'ABORTED')
     }
 
-    signal?.addEventListener('abort', cleanup)
-
-    const { status, statusText, url, headers: resHeaders, responseId } = await fetchSend(requestId)
-
-    const body = new ReadableStream({
-      start(controller) {
-        try {
-          fetchStream(responseId)
-          onStream((id, data) => {
-            if (id === responseId) {
-              controller.enqueue(data)
-            }
-          })
-          onStreamEnd((id) => {
-            if (id === responseId) {
-              controller.close()
-            }
-          })
-          onStreamError((id, error) => {
-            if (id === responseId) {
-              controller.error(error)
-            }
-          })
-        }
-        catch (error) {
-          controller.error(error)
-        }
-      },
-      cancel() {
-        fetchCancel(responseId)
-      },
+    signal?.addEventListener('abort', cleanup, {
+      signal,
     })
 
+    let body: BodyInit | null = null
+    if (stream) {
+      body = new ReadableStream({
+        start(controller) {
+          try {
+            fetchStream(requestId)
+            onStream((id, data) => {
+              if (id === requestId) {
+                controller.enqueue(data)
+              }
+            })
+            onStreamEnd((id) => {
+              if (id === requestId) {
+                controller.close()
+              }
+            })
+            onStreamError((id, error) => {
+              if (id === requestId) {
+                controller.error(error)
+              }
+            })
+          }
+          catch (error) {
+            controller.error(error)
+          }
+        },
+        cancel() {
+          fetchCancel(requestId)
+        },
+      })
+    }
+    else {
+      body = await fetchBody(requestId)
+    }
     const response = new Response(body, {
       status,
       statusText,
       headers: new Headers(resHeaders),
     })
-
     Object.defineProperty(response, 'url', { value: url })
     return response
   }
@@ -101,7 +122,6 @@ export async function fetch(input: URL | Request | string, init?: RequestInit & 
       throw error
     }
     const message = error instanceof Error ? error.message : 'Unknown error'
-    console.error('Fetch failed:', error)
     throw new FetchError(message, 'FETCH_ERROR')
   }
 }

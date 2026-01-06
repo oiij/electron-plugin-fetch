@@ -1,35 +1,54 @@
+import type { ContextBridge, IpcRenderer } from 'electron'
 import type { ClientConfig, FetchSendResponse } from './types'
-import { ipcRenderer } from 'electron'
+import process from 'node:process'
+import { ELECTRON_PLUGIN_FETCH_API_KEY, HANDLE_MAP } from './config'
 
-export const electronFetchPreloadExpose = {
-  async fetch(config: ClientConfig): Promise<{ requestId: string, config: ClientConfig }> {
-    return ipcRenderer.invoke('plugin:fetch', config)
-  },
-  async fetchCancel(id: string): Promise<void> {
-    return ipcRenderer.invoke('plugin:fetch-cancel', id)
-  },
-  async fetchSend(id: string): Promise<FetchSendResponse> {
-    return ipcRenderer.invoke('plugin:fetch-send', id)
-  },
-  async fetchBody(id: string): Promise<ArrayBuffer> {
-    return ipcRenderer.invoke('plugin:fetch-body', id)
-  },
-  fetchStream(id: string) {
-    return ipcRenderer.send('plugin:fetch-stream', id)
-  },
-  onStream(cb: (id: string, data: Uint8Array) => void) {
-    ipcRenderer.on('plugin:fetch-stream-data', (_, id, data) => {
-      cb(id, data)
-    })
-  },
-  onStreamEnd(cb: (id: string) => void) {
-    ipcRenderer.on('plugin:fetch-stream-end', (_, id) => {
-      cb(id)
-    })
-  },
-  onStreamError(cb: (id: string, error: any) => void) {
-    ipcRenderer.on('plugin:fetch-stream-error', (_, id, error) => {
-      cb(id, error)
-    })
-  },
+const { FetchRequest, FetchCancel, FetchBody, FetchStream, OnStream, OnStreamEnd, OnStreamError } = HANDLE_MAP
+
+export function electronPluginFetchPreloadRegister(contextBridge: ContextBridge, ipcRenderer: IpcRenderer) {
+  const api = {
+    async fetchRequest(config: ClientConfig): Promise<FetchSendResponse> {
+      return ipcRenderer.invoke(FetchRequest, config)
+    },
+    async fetchCancel(requestId: string): Promise<void> {
+      return ipcRenderer.invoke(FetchCancel, requestId)
+    },
+    async fetchBody(requestId: string): Promise<ArrayBuffer> {
+      return ipcRenderer.invoke(FetchBody, requestId)
+    },
+    fetchStream(requestId: string) {
+      return ipcRenderer.send(FetchStream, requestId)
+    },
+    onStream(cb: (requestId: string, data: Uint8Array) => void) {
+      ipcRenderer.on(OnStream, (_, requestId, data) => {
+        cb(requestId, data)
+      })
+    },
+    onStreamEnd(cb: (requestId: string) => void) {
+      ipcRenderer.on(OnStreamEnd, (_, requestId) => {
+        cb(requestId)
+      })
+    },
+    onStreamError(cb: (requestId: string, error: any) => void) {
+      ipcRenderer.on(OnStreamError, (_, requestId, error) => {
+        cb(requestId, error)
+      })
+    },
+  }
+  if (process.contextIsolated) {
+    try {
+      contextBridge.exposeInMainWorld(ELECTRON_PLUGIN_FETCH_API_KEY, api)
+    }
+    catch (error) {
+      console.error(error)
+    }
+  }
+  else {
+    window[ELECTRON_PLUGIN_FETCH_API_KEY] = api
+  }
+  return api
 }
+
+export type ElectronPluginFetchPreloadReturns = ReturnType<typeof electronPluginFetchPreloadRegister>
+
+export { ELECTRON_PLUGIN_FETCH_API_KEY }

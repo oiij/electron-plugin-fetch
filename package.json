@@ -1,7 +1,7 @@
 {
   "name": "electron-plugin-fetch",
   "type": "module",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "description": "",
   "author": "oiij",
   "license": "MIT",
@@ -17,19 +17,25 @@
   "sideEffects": false,
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js",
-      "require": "./dist/index.cjs"
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs"
     },
-    "./plugin": {
-      "types": "./dist/plugin.d.ts",
-      "import": "./dist/plugin.js",
-      "require": "./dist/plugin.cjs"
+    "./fetch": {
+      "types": "./dist/fetch.d.mts",
+      "import": "./dist/fetch.mjs"
+    },
+    "./main": {
+      "types": "./dist/main.d.mts",
+      "import": "./dist/main.mjs"
+    },
+    "./preload": {
+      "types": "./dist/preload.d.mts",
+      "import": "./dist/preload.mjs"
     }
   },
-  "main": "./dist/index.js",
-  "module": "./dist/index.js",
-  "types": "./dist/index.d.ts",
+  "main": "./dist/index.mjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
   "files": [
     "LICENSE",
     "README.md",
@@ -37,10 +43,8 @@
     "package.json"
   ],
   "scripts": {
-    "dev": "tsup --watch",
-    "dev:unbuild": "unbuild --stub",
-    "build": "tsc --noEmit && tsup",
-    "build:unbuild": "tsc --noEmit && unbuild",
+    "dev": "tsdown --watch",
+    "build": "tsc --noEmit && tsdown",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "prepublishOnly": "pnpm build",
@@ -57,32 +61,33 @@
     "preinstall": "npx only-allow pnpm"
   },
   "peerDependencies": {
-    "axios": "^1.8.1",
-    "electron": "^35.0.0"
+    "axios": "^1.13.2",
+    "electron": "^39.2.7"
   },
   "dependencies": {
-    "mime": "^4.0.6",
-    "nanoid": "^5.1.2"
+    "mime": "^4.1.0",
+    "nanoid": "^5.1.6"
   },
   "devDependencies": {
-    "@antfu/eslint-config": "^4.2.0",
+    "@antfu/eslint-config": "^6.7.3",
     "@oiij/tsconfig": "^0.0.1",
-    "@types/node": "^22.13.1",
-    "@vitest/ui": "^3.0.5",
-    "bumpp": "^10.0.3",
-    "commitlint": "^19.7.1",
-    "cz-git": "^1.11.0",
-    "czg": "^1.11.0",
-    "eslint": "^9.20.1",
-    "eslint-plugin-format": "^1.0.1",
+    "@types/node": "^25.0.3",
+    "@vitest/ui": "^4.0.16",
+    "axios": "^1.13.2",
+    "bumpp": "^10.3.2",
+    "commitlint": "^20.3.0",
+    "cz-git": "^1.12.0",
+    "czg": "^1.12.0",
+    "electron": "^39.2.7",
+    "eslint": "^9.39.2",
+    "eslint-plugin-format": "^1.1.0",
     "esno": "^4.8.0",
-    "lint-staged": "^15.4.3",
-    "simple-git-hooks": "^2.11.1",
-    "taze": "^18.5.0",
-    "tsup": "8.3.6",
-    "typescript": "^5.7.3",
-    "unbuild": "^3.3.1",
-    "vitest": "^3.0.5"
+    "lint-staged": "^16.2.7",
+    "simple-git-hooks": "^2.13.1",
+    "taze": "^19.9.2",
+    "tsdown": "0.19.0-beta.2",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.16"
   },
   "simple-git-hooks": {
     "pre-commit": "pnpm lint-staged && pnpm type:check"

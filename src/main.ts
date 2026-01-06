@@ -1,54 +1,32 @@
 /// <reference lib="dom.iterable" />
+
+import type { IpcMain } from 'electron'
 import type { ClientConfig, FetchMapValue } from './types'
-import { ipcMain } from 'electron'
 import { nanoid } from 'nanoid'
-import { FetchError } from './utils'
+import { ELECTRON_PLUGIN_FETCH, HANDLE_MAP } from './config'
+
+class FetchError extends Error {
+  constructor(message: string, public code: string) {
+    super(message)
+    this.name = 'FetchError'
+  }
+}
 
 const fetchMap = new Map<string, FetchMapValue>()
 
-export function registerElectronFetch() {
-  ipcMain.handle('plugin:fetch', (_, config: ClientConfig) => {
-    try {
-      const requestId = `fetch-${Date.now()}-${nanoid()}`
-      const abortController = new AbortController()
-      fetchMap.set(requestId, {
-        config,
-        abortController,
-      })
-      return { requestId, config }
-    }
-    catch (error) {
-      console.error('Failed to initialize fetch:', error)
-      throw new FetchError('Failed to initialize fetch', 'INIT_ERROR')
-    }
-  })
-
-  ipcMain.handle('plugin:fetch-cancel', (_, id: string) => {
-    try {
-      const ins = fetchMap.get(id)
-      if (ins) {
-        ins.abortController?.abort()
-        fetchMap.delete(id)
-      }
-    }
-    catch (error) {
-      console.error('Failed to cancel fetch:', error)
-    }
-  })
-
-  ipcMain.handle('plugin:fetch-send', async (_, id: string) => {
-    const ins = fetchMap.get(id)
-    if (!ins) {
-      throw new FetchError('FetchId not found', 'ID_NOT_FOUND')
-    }
-    const { config, abortController } = ins
-    const { method, url, headers, data, timeout } = config
+export function electronPluginFetchRegister(ipcMain: IpcMain) {
+  const { FetchRequest, FetchCancel, FetchBody, FetchStream, OnStream, OnStreamEnd, OnStreamError } = HANDLE_MAP
+  ipcMain.handle(FetchRequest, async (_, config: ClientConfig) => {
     let timeoutId: NodeJS.Timeout | undefined
+
     try {
+      const requestId = `${ELECTRON_PLUGIN_FETCH}:${Date.now()}-${nanoid()}`
+      const abortController = new AbortController()
+      const { method, url, headers, data, timeout } = config
       if (timeout) {
         timeoutId = setTimeout(() => {
           abortController?.abort()
-          fetchMap.delete(id)
+          fetchMap.delete(requestId)
           throw new FetchError('Request timeout', 'TIMEOUT')
         }, timeout)
       }
@@ -59,22 +37,29 @@ export function registerElectronFetch() {
         body: data ?? null,
         signal: abortController?.signal,
       })
-      ins.request = req
       const res = await fetch(req)
-      ins.response = res
+
       const { status, statusText, url: responseUrl, headers: resHeaders } = res
+
+      fetchMap.set(requestId, {
+        config,
+        abortController,
+        request: req,
+        response: res,
+      })
+
       return {
         status,
         statusText,
         headers: Array.from(resHeaders.entries()),
         url: responseUrl,
-        responseId: id,
+        requestId,
       }
     }
     catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'
       console.error('Failed to send fetch:', error)
-      throw new FetchError(errorMessage, 'FETCH_ERROR')
+      throw new FetchError(errorMessage, 'FETCH_REQUEST_ERROR')
     }
     finally {
       if (timeoutId) {
@@ -83,13 +68,26 @@ export function registerElectronFetch() {
     }
   })
 
-  ipcMain.handle('plugin:fetch-body', async (_, id: string) => {
-    const ins = fetchMap.get(id)
-    if (!ins) {
-      throw new FetchError('FetchId not found', 'ID_NOT_FOUND')
+  ipcMain.handle(FetchCancel, (_, requestId: string) => {
+    try {
+      const inst = fetchMap.get(requestId)
+      if (inst) {
+        inst.abortController?.abort()
+        fetchMap.delete(requestId)
+      }
+    }
+    catch (error) {
+      console.error('Failed to cancel fetch:', error)
+    }
+  })
+
+  ipcMain.handle(FetchBody, async (_, requestId: string) => {
+    const inst = fetchMap.get(requestId)
+    if (!inst) {
+      throw new FetchError('RequestId not found', 'ID_NOT_FOUND')
     }
 
-    const { response } = ins
+    const { response } = inst
     if (!response) {
       throw new FetchError('Response not found', 'RESPONSE_NOT_FOUND')
     }
@@ -102,46 +100,47 @@ export function registerElectronFetch() {
       return []
     }
     catch (error) {
-      console.error('Failed to read response body:', error)
-      throw new FetchError('Failed to read response body', 'BODY_ERROR')
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      throw new FetchError(errorMessage, 'FETCH_BODY_ERROR')
     }
     finally {
       // 清理资源
-      fetchMap.delete(id)
+      fetchMap.delete(requestId)
     }
   })
 
-  ipcMain.on('plugin:fetch-stream', async (event, id: string) => {
-    const ins = fetchMap.get(id)
-    if (!ins) {
-      event.reply('plugin:fetch-error', id, new FetchError('FetchId not found', 'ID_NOT_FOUND'))
+  ipcMain.on(FetchStream, async (event, requestId: string) => {
+    const inst = fetchMap.get(requestId)
+    if (!inst) {
+      event.reply(OnStreamError, requestId, new FetchError('RequestId not found', 'ID_NOT_FOUND'))
       return
     }
 
     try {
-      const { response } = ins
+      const { response } = inst
       if (!response?.body) {
-        event.reply('plugin:fetch-stream-end', id)
+        event.reply(OnStreamEnd, requestId)
         return
       }
 
-      const reader = ins.reader ?? response.body.getReader()
-      ins.reader = reader
+      const reader = inst.reader ?? response.body.getReader()
+      inst.reader = reader
 
       while (true) {
         const { done, value } = await reader.read()
         if (done) {
-          event.reply('plugin:fetch-stream-end', id)
-          fetchMap.delete(id)
+          event.reply(OnStreamEnd, requestId)
+          fetchMap.delete(requestId)
           break
         }
-        event.reply('plugin:fetch-stream-data', id, value)
+        event.reply(OnStream, requestId, value)
       }
     }
     catch (error) {
-      console.error('Stream read error:', id, error)
-      event.reply('plugin:fetch-error', new FetchError('Stream read failed', 'STREAM_ERROR'))
-      fetchMap.delete(id)
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      event.reply(OnStreamError, requestId, new FetchError(errorMessage, 'FETCH_STREAM_ERROR'))
+      fetchMap.delete(requestId)
     }
   })
 }
+export { ClientConfig }
